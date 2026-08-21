@@ -18,10 +18,52 @@ concurrency:
   group: upload
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   upload:
     runs-on: ubuntu-latest
     steps:
+      # Branch protection and deployment environments both want GitHub Pro on a private
+      # repository, and this one is private, so the gate is here instead. It is a real
+      # gate for the path it covers — a pull request merged without a review from
+      # somebody other than its author uploads nothing — and it is honestly weaker than
+      # the platform's: anybody who can push straight to main goes around it. Keep that
+      # in mind when handing out write access, or make the repository public, where the
+      # platform's own protection costs nothing. Nothing in here is secret: every
+      # picture is already served to everyone at /of/<address>.
+      - name: Was this looked at by somebody other than whoever wrote it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          pr=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number' 2>/dev/null || echo '')
+          if [ -z "$pr" ] || [ "$pr" = "null" ]; then
+            echo "This commit did not arrive through a pull request, so nobody reviewed it."
+            echo "Open one. If that is not possible, upload by hand — the command is in"
+            echo "the ColdSeeker repository, proxy/README.md — and say in the commit why."
+            exit 1
+          fi
+
+          author=$(gh api "repos/$REPO/pulls/$pr" --jq '.user.login')
+          approvers=$(gh api "repos/$REPO/pulls/$pr/reviews" --jq '[.[] | select(.state == "APPROVED") | .user.login] | unique | .[]' || true)
+
+          others=$(printf '%s\n' "$approvers" | grep -v "^${author}$" | grep -v '^$' || true)
+          if [ -z "$others" ]; then
+            echo "Pull request #$pr was opened by $author and approved by nobody else."
+            echo "A picture here is this project telling somebody, on the screen where they"
+            echo "decide whether to sign, that it belongs to that address. One other pair of"
+            echo "eyes is the whole cost of saying that."
+            exit 1
+          fi
+
+          echo "Pull request #$pr, approved by: $(printf '%s ' $others)"
+
       - uses: actions/checkout@v4
         with:
           # The previous commit as well, so the diff below has something to compare
