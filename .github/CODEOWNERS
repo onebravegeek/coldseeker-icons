@@ -1,0 +1,4 @@
+# Every picture needs the owner's eye, because the machine can check that a file is a
+# PNG of the right size under a real address, and cannot check the only thing that
+# matters: that this picture belongs to that address rather than to whoever wants it to.
+*       @mediakov

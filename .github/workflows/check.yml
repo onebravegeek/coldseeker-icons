@@ -1,0 +1,95 @@
+# What a pull request has to survive before anybody is asked to look at it.
+#
+# It uploads nothing. Everything here is a thing the worker would refuse anyway — the
+# point is that a contributor hears it in thirty seconds from a machine, rather than in
+# a day from a person, and that the person reviewing spends their attention on the only
+# question a machine cannot answer: does this picture belong to that address.
+name: Before anybody looks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check what this pull request adds
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+
+          changed=$(git diff --name-status "$BASE" "$HEAD" -- tokens programs)
+          if [ -z "$changed" ]; then
+            echo "No picture added, changed or removed. Nothing to check."
+            exit 0
+          fi
+
+          fail=0
+          while IFS=$'\t' read -r status path rest; do
+            [ -n "${path:-}" ] || continue
+            name=$(basename "$path")
+            address="${name%.*}"
+
+            if [ "$status" = "D" ]; then
+              echo "remove $address — fine, the bucket drops it when this merges"
+              continue
+            fi
+
+            echo "check $address"
+
+            # The filename is the address, exactly as it appears on chain. Nothing
+            # derives it and nothing normalises it, so a typo here is a picture filed
+            # under a key nobody will ever ask for.
+            if ! printf '%s' "$address" | grep -Eq '^[1-9A-HJ-NP-Za-km-z]{32,44}$'; then
+              echo "  the filename is not a base58 address — the worker will refuse it with 400"
+              fail=1
+            fi
+
+            size=$(wc -c < "$path")
+            if [ "$size" -gt 262144 ]; then
+              echo "  $size bytes; the worker refuses anything over 262144 with 413"
+              fail=1
+            fi
+
+            # By magic bytes, the same way the worker decides — a .png extension on a
+            # file that is not a PNG passes every check but the one that matters.
+            kind=$(python3 - "$path" <<'PY'
+import sys
+b = open(sys.argv[1], 'rb').read(16)
+if b[:8] == b'\x89PNG\r\n\x1a\n': print('PNG')
+elif b[:3] == b'\xff\xd8\xff': print('JPEG')
+elif b[:4] == b'RIFF' and b[8:12] == b'WEBP': print('WebP')
+elif b[:6] in (b'GIF87a', b'GIF89a'): print('GIF')
+else: print('no')
+PY
+)
+            if [ "$kind" = "no" ]; then
+              echo "  not a PNG, JPEG, WebP or GIF by its first bytes — the worker refuses with 415"
+              fail=1
+            else
+              echo "  $kind, $size bytes"
+            fi
+
+            # The only record of where a picture came from. The bucket keeps bytes and
+            # dates; this is what answers "who put this here, and why" in a year.
+            source=$(python3 -c 'import json,sys; print(json.load(open("sources.json")).get(sys.argv[1], ""))' "$address" 2>/dev/null || echo '')
+            if [ -z "$source" ]; then
+              echo "  no line in sources.json — say where these bytes came from"
+              fail=1
+            else
+              echo "  from: $source"
+            fi
+          done <<< "$changed"
+
+          if [ "$fail" != "0" ]; then
+            echo ""
+            echo "Nothing was uploaded. Fix the above and push again."
+          fi
+          exit $fail
