@@ -71,13 +71,10 @@ jobs:
               A|M|R*|C*)
                 # Where these bytes came from. The worker stores it beside the picture,
                 # and it is the only answer anybody gets later to "who put this here".
-                source=$(python3 -c "
-import json,sys
-try:
-    print(json.load(open('sources.json')).get(sys.argv[1], ''))
-except Exception:
-    print('')
-" "$address")
+                # One line, and indented like everything else in this block: a line
+                # with less indentation than the block ends it, and YAML then reads the
+                # rest of the script as keys. That is what "workflow file issue" meant.
+                source=$(python3 -c 'import json,sys; print(json.load(open("sources.json")).get(sys.argv[1], ""))' "$address" 2>/dev/null || echo '')
                 if [ -z "$source" ]; then
                   echo "  $address has no line in sources.json — refusing to upload a picture nobody can trace"
                   fail=1
