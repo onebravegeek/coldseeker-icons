@@ -60,16 +60,11 @@ jobs:
 
             # By magic bytes, the same way the worker decides — a .png extension on a
             # file that is not a PNG passes every check but the one that matters.
-            kind=$(python3 - "$path" <<'PY'
-import sys
-b = open(sys.argv[1], 'rb').read(16)
-if b[:8] == b'\x89PNG\r\n\x1a\n': print('PNG')
-elif b[:3] == b'\xff\xd8\xff': print('JPEG')
-elif b[:4] == b'RIFF' and b[8:12] == b'WEBP': print('WebP')
-elif b[:6] in (b'GIF87a', b'GIF89a'): print('GIF')
-else: print('no')
-PY
-)
+            # One line on purpose: a heredoc's body sits at column zero, and a line
+            # with less indentation than this block ends the block. YAML then reads the
+            # rest of the script as keys, GitHub says "workflow file issue", and no step
+            # runs at all. It happened twice in one afternoon before it was written down.
+            kind=$(python3 -c 'import sys; b=open(sys.argv[1],"rb").read(16); print("PNG" if b[:8]==b"\x89PNG\r\n\x1a\n" else "JPEG" if b[:3]==b"\xff\xd8\xff" else "WebP" if b[:4]==b"RIFF" and b[8:12]==b"WEBP" else "GIF" if b[:6] in (b"GIF87a",b"GIF89a") else "no")' "$path")
             if [ "$kind" = "no" ]; then
               echo "  not a PNG, JPEG, WebP or GIF by its first bytes — the worker refuses with 415"
               fail=1
