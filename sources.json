@@ -1,0 +1,6 @@
+{
+  "_comment": "address -> where the bytes came from. Every file in tokens/ and programs/ needs a line here; CI sends it to the worker, which stores it beside the picture.",
+  "_example": {
+    "So11111111111111111111111111111111111111112": "https://solana.com/branding — official brand kit, downloaded 2026-08-21"
+  }
+}

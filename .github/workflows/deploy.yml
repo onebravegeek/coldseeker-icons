@@ -1,0 +1,108 @@
+# Every picture in this repository, into the bucket the wallet reads from.
+#
+# The upload does not go to R2 directly. It goes through ColdSeeker's own worker, at
+# PUT /manual/<address>, guarded by a secret this repository holds and that worker
+# holds and nothing else does. Two reasons, both worth keeping: minting an R2 token
+# needs a browser and a person, and a token that can write to a bucket is a wider thing
+# to hand a CI runner than a key that can write one prefix through one endpoint that
+# checks what it is being handed.
+name: Into the bucket
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Two pushes uploading the same address in two orders is a picture nobody chose.
+  group: upload
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The previous commit as well, so the diff below has something to compare
+          # against. A shallow clone makes every push look like the first one.
+          fetch-depth: 2
+
+      - name: Send what changed
+        env:
+          KEY: ${{ secrets.ICONS_KEY }}
+          WORKER: https://coldseeker-rpc.mediakov.workers.dev
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KEY:-}" ]; then
+            echo "ICONS_KEY is not set on this repository. Nothing can be uploaded."
+            exit 1
+          fi
+
+          # What this push changed under tokens/ and programs/, and nothing else. A
+          # README edit uploads no pictures.
+          before="${{ github.event.before }}"
+          case "$before" in
+            ""|0000000000000000000000000000000000000000) range="HEAD" ;;
+            *) range="$before HEAD" ;;
+          esac
+
+          changed=$(git diff --name-status $range -- tokens programs || git ls-files tokens programs | sed 's/^/A\t/')
+
+          if [ -z "$changed" ]; then
+            echo "No picture changed in this push."
+            exit 0
+          fi
+
+          fail=0
+          while IFS=$'\t' read -r status path rest; do
+            [ -n "${path:-}" ] || continue
+            address=$(basename "$path" | sed 's/\.[^.]*$//')
+
+            case "$status" in
+              D)
+                echo "delete $address"
+                code=$(curl -sS -o /tmp/out -w '%{http_code}' -X DELETE \
+                  -H "authorization: Bearer $KEY" \
+                  "$WORKER/manual/$address")
+                ;;
+              A|M|R*|C*)
+                # Where these bytes came from. The worker stores it beside the picture,
+                # and it is the only answer anybody gets later to "who put this here".
+                source=$(python3 -c "
+import json,sys
+try:
+    print(json.load(open('sources.json')).get(sys.argv[1], ''))
+except Exception:
+    print('')
+" "$address")
+                if [ -z "$source" ]; then
+                  echo "  $address has no line in sources.json — refusing to upload a picture nobody can trace"
+                  fail=1
+                  continue
+                fi
+                echo "upload $address ($(wc -c < "$path") bytes)"
+                code=$(curl -sS -o /tmp/out -w '%{http_code}' -X PUT \
+                  -H "authorization: Bearer $KEY" \
+                  -H "x-icon-source: $source" \
+                  -H "x-icon-commit: $SHA" \
+                  --data-binary "@$path" \
+                  "$WORKER/manual/$address")
+                ;;
+              *)
+                continue
+                ;;
+            esac
+
+            if [ "$code" != "200" ] && [ "$code" != "204" ]; then
+              # The worker's own words. It refuses for reasons a person can act on —
+              # too large, not a raster image, not an address — so print what it said
+              # rather than a status code on its own.
+              echo "  refused with $code: $(cat /tmp/out)"
+              fail=1
+            fi
+          done <<< "$changed"
+
+          exit $fail
