@@ -26,15 +26,27 @@ jobs:
   upload:
     runs-on: ubuntu-latest
     steps:
-      # Branch protection and deployment environments both want GitHub Pro on a private
-      # repository, and this one is private, so the gate is here instead. It is a real
-      # gate for the path it covers — a pull request merged without a review from
-      # somebody other than its author uploads nothing — and it is honestly weaker than
-      # the platform's: anybody who can push straight to main goes around it. Keep that
-      # in mind when handing out write access, or make the repository public, where the
-      # platform's own protection costs nothing. Nothing in here is secret: every
-      # picture is already served to everyone at /of/<address>.
-      - name: Was this looked at by somebody other than whoever wrote it
+      # What a commit has to have been through before its pictures reach the bucket.
+      #
+      # It must have arrived as a pull request: the check ran on it, the diff is a page
+      # somebody can open, and reverting it is one button. A push straight to main
+      # cannot happen — branch protection refuses it, for admins too — so in practice
+      # this catches the case where protection is turned off or a merge arrives by some
+      # route nobody thought of.
+      #
+      # What this deliberately does NOT require is an approving review. It used to, and
+      # the rule was written for two people; there is one, and GitHub will not let
+      # somebody approve their own pull request, so the rule meant "nothing ever
+      # merges" rather than "everything gets a second look". Pretending otherwise
+      # would have left a gate that is really a lock with no key.
+      #
+      # To turn the second pair of eyes back on the day there are two: raise
+      # required_approving_review_count to 1 on the branch protection, and add back the
+      # check that the approver is not the author. Until then, the honest description
+      # of this repository's guarantee is: nothing reaches the bucket that did not go
+      # through a pull request whose check passed, and every picture is a commit
+      # somebody can find and revert.
+      - name: Did this arrive through a pull request
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
@@ -44,25 +56,14 @@ jobs:
 
           pr=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number' 2>/dev/null || echo '')
           if [ -z "$pr" ] || [ "$pr" = "null" ]; then
-            echo "This commit did not arrive through a pull request, so nobody reviewed it."
-            echo "Open one. If that is not possible, upload by hand — the command is in"
-            echo "the ColdSeeker repository, proxy/README.md — and say in the commit why."
+            echo "This commit did not arrive through a pull request, so nothing checked it"
+            echo "and there is no page to revert. Open one. If that is genuinely not"
+            echo "possible, upload by hand — the command is in the ColdSeeker repository,"
+            echo "proxy/README.md — and say in the commit why."
             exit 1
           fi
 
-          author=$(gh api "repos/$REPO/pulls/$pr" --jq '.user.login')
-          approvers=$(gh api "repos/$REPO/pulls/$pr/reviews" --jq '[.[] | select(.state == "APPROVED") | .user.login] | unique | .[]' || true)
-
-          others=$(printf '%s\n' "$approvers" | grep -v "^${author}$" | grep -v '^$' || true)
-          if [ -z "$others" ]; then
-            echo "Pull request #$pr was opened by $author and approved by nobody else."
-            echo "A picture here is this project telling somebody, on the screen where they"
-            echo "decide whether to sign, that it belongs to that address. One other pair of"
-            echo "eyes is the whole cost of saying that."
-            exit 1
-          fi
-
-          echo "Pull request #$pr, approved by: $(printf '%s ' $others)"
+          echo "Pull request #$pr"
 
       - uses: actions/checkout@v4
         with:
