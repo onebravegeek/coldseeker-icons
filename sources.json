@@ -2,5 +2,9 @@
   "_comment": "address -> where the bytes came from. Every file in tokens/ and programs/ needs a line here; CI sends it to the worker, which stores it beside the picture.",
   "_example": {
     "So11111111111111111111111111111111111111112": "https://solana.com/branding — official brand kit, downloaded 2026-08-21"
-  }
+  },
+  "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo": "https://github.com/MeteoraAg/brand-kit — meteora-v2/symbol/symbol.png, Meteora's own brand-kit repository (blob 794df007c916c2fa8e16dc9c38e818d7a5570b90), downloaded 2026-08-21",
+  "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX": "https://github.com/openbook-dex/resources — brand/OpenBook-Logomark.svg (blob 45b299b922d03a22a95402987f76b133c51dedb5), the same repository whose README names this address as OpenBook's mainnet deployment; rasterised here to 512x512 PNG because the worker takes no SVG, downloaded 2026-08-21",
+  "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY": "https://www.phoenix.trade/icon.png — the Phoenix mark from Ellipsis Labs' own site, matching public/phoenix-mark-orange-sm.svg in github.com/Ellipsis-Labs/perps-observatory, downloaded 2026-08-21",
+  "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu": "https://avatars.githubusercontent.com/u/84348534 — the Squads-Protocol GitHub organisation's own profile picture, the same account that publishes squads-mpl where this address is declared, downloaded 2026-08-21"
 }
