@@ -50,3 +50,4 @@ telling somebody, on the screen where they decide whether to sign, that this pic
 belongs to that address. Take it from the protocol's own site or the token's own
 publisher, write down which, and if you cannot say where it came from, do not add it —
 the made mark it would replace is honest, and this would not be.
+test
